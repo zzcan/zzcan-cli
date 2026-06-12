@@ -23,6 +23,7 @@ import {
   createQueueState, queueEvent,
 } from "./lib.mjs";
 import { createStreamSlot } from "./stream.mjs";
+import { redactSecrets } from "./redact.mjs";
 import { createFeishuChannel } from "../channels/feishu.mjs";
 import { createTelegramChannel } from "../channels/telegram.mjs";
 
@@ -196,7 +197,8 @@ function peekDelta(turnId) {
   if (!transcriptPath || !existsSync(transcriptPath)) return null;
   const from = turnOffsets.get(turnId);
   if (from === undefined) return null;
-  return parseTranscriptDelta(readRange(transcriptPath, from));
+  // 流式中间态也会发到 IM 服务器，同样要脱敏
+  return redactSecrets(parseTranscriptDelta(readRange(transcriptPath, from)));
 }
 
 // ---- 流式驱动（adapter 提供 stream 才启用；竞态防护在 core/stream.mjs 的链式槽里）----
@@ -226,7 +228,7 @@ let state = createQueueState();
 
 async function deliverReply(turn, slot, reply, { late = false } = {}) {
   const prefix = late ? "🕐 迟到的回复：\n" : "";
-  const text = truncateReply(prefix + (reply || ""), MAX_REPLY_CHARS);
+  const text = truncateReply(redactSecrets(prefix + (reply || "")), MAX_REPLY_CHARS);
   if (slot && await slot.finish(text)) return; // 终稿已由流式消息承载
   if (reply) {
     await chSend(turn.msg.channel, turn.msg.senderId, text);

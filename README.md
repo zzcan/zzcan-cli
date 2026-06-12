@@ -23,6 +23,7 @@
 - 多通道共享同一个 claude session（飞书问一半换 Telegram 接着聊，context 连贯），回复发回来源通道
 - Telegram 流式输出（占位消息 + 增量编辑，超 4096 字符自动滚动到新消息）；飞书一次性全文 + 表情回执
 - 白名单（飞书 open_id / Telegram user id），仅私聊、仅文本
+- 出站脱敏：回复发往 IM 服务器前抹掉常见密钥格式（sk-/GitHub/AWS/Slack/TG token、JWT、私钥块、Bearer、key=value 赋值）
 - 严格串行队列：连发多条按序处理，互不串扰
 - 内置命令（不进 Claude，daemon 纯代码处理）：`/reset` 重启 claude、`/clear` 清 context、`/stop` 中断当前轮、`/status`、`/cd <名字>` 切换预登记的工作区（config 的 `workspaces` 映射；切换会重启 claude、context 清零）
 - claude 进程死亡自动 respawn；监听断线自动重连并告警；单轮超时提醒
