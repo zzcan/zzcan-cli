@@ -5,7 +5,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { filterEvent, createLineSplitter } from "../core/lib.mjs";
+import { createLineSplitter } from "../core/lib.mjs";
+import { filterEvent } from "./feishu.logic.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

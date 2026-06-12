@@ -1,37 +1,6 @@
-// lib.mjs — feishu-tmux-bridge 纯函数层（daemon.mjs 负责 IO，这里只做可单测的逻辑）
+// core/lib.mjs — 通道无关的纯函数层（daemon.mjs 负责 IO）。
+// 通道专属纯逻辑在 channels/*.logic.mjs。
 
-// 过滤一行 lark-cli event NDJSON。
-// 返回: {action:'allow', openId, text, msgId}
-//     | {action:'notify_nontext', openId, msgId}
-//     | {action:'skip', reason}
-export function filterEvent(line, config, seenIds) {
-  let ev;
-  try {
-    ev = JSON.parse(line);
-  } catch {
-    return { action: "skip", reason: "malformed" };
-  }
-  if (ev?.header?.event_type !== "im.message.receive_v1") {
-    return { action: "skip", reason: "type" };
-  }
-  const msg = ev.event?.message ?? {};
-  const openId = ev.event?.sender?.sender_id?.open_id;
-  const msgId = msg.message_id;
-  if (!openId || !msgId) return { action: "skip", reason: "malformed" };
-  if (!config.allowed_senders?.includes(openId)) return { action: "skip", reason: "sender" };
-  if (msg.chat_type !== "p2p") return { action: "skip", reason: "group" };
-  if (seenIds.has(msgId)) return { action: "skip", reason: "dup" };
-  seenIds.add(msgId);
-  if (msg.message_type !== "text") return { action: "notify_nontext", openId, msgId };
-  let text;
-  try {
-    text = JSON.parse(msg.content)?.text;
-  } catch {
-    return { action: "skip", reason: "malformed" };
-  }
-  if (typeof text !== "string" || text.trim() === "") return { action: "skip", reason: "malformed" };
-  return { action: "allow", openId, text, msgId };
-}
 
 // 解析 transcript jsonl 增量，抽出本轮所有 assistant 文本块（跳过 thinking/tool_use），按序拼接。
 export function parseTranscriptDelta(jsonlText) {
@@ -161,43 +130,6 @@ export function createLineSplitter(onLine) {
   };
 }
 
-// ---- Telegram 纯逻辑 ----
-
-// 按 maxChars 切块，优先在换行处断（窗口内有 \n 就用最后一个），否则硬切。
-export function splitForTelegram(text, maxChars) {
-  const chunks = [];
-  let rest = text;
-  while (rest.length > maxChars) {
-    const window = rest.slice(0, maxChars + 1);
-    const nl = window.lastIndexOf("\n");
-    const cut = nl > 0 ? nl : maxChars;
-    chunks.push(rest.slice(0, cut));
-    rest = rest.slice(nl > 0 ? cut + 1 : cut);
-  }
-  chunks.push(rest);
-  return chunks;
-}
-
-// 解析一条 getUpdates 的 update（已是对象）。offset 机制保证不重复，无需 seen 去重。
-// 返回: {action:'allow', senderId, text, msgId} | {action:'skip', reason}
-export function parseTelegramUpdate(update, config) {
-  const m = update?.message;
-  if (!m) return { action: "skip", reason: "type" };
-  const senderId = m.from?.id;
-  if (!senderId || !config.allowed_user_ids?.includes(senderId)) return { action: "skip", reason: "sender" };
-  if (m.chat?.type !== "private") return { action: "skip", reason: "group" };
-  if (typeof m.text !== "string" || m.text.trim() === "") return { action: "skip", reason: "nontext" };
-  return { action: "allow", senderId, text: m.text, msgId: m.message_id };
-}
-
-// 流式步进决策：当前占位消息已显示 shown，全文长成了 full。
-// noop=没变化；edit=编辑为 full；rollover=占位消息用 finalize 定稿，carry 开新占位继续。
-export function nextStreamStep(shown, full, maxChars) {
-  if (full === shown) return { type: "noop" };
-  if (full.length <= maxChars) return { type: "edit", text: full };
-  const [finalize, ...rest] = splitForTelegram(full, maxChars);
-  return { type: "rollover", finalize, carry: rest.join("\n") };
-}
 
 // from=0 兜底读取（session 切换/auto-compact 后路径变了）时使用：
 // 只取“最后一条真人消息”之后的 assistant 文本，防止把整段历史当回复发出去。

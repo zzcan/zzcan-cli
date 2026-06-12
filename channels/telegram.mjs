@@ -7,7 +7,7 @@
 // 环境变量：BRIDGE_TG_API_BASE 覆盖 API 根（e2e 假 server 用，默认 https://api.telegram.org）
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseTelegramUpdate, splitForTelegram, nextStreamStep } from "../core/lib.mjs";
+import { parseTelegramUpdate, splitForTelegram, nextStreamStep } from "./telegram.logic.mjs";
 
 const TG_MAX = 4096;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
