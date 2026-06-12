@@ -18,11 +18,8 @@ fi
 # 初始化 config：优先从上一代状态目录迁移（daemon 会再把旧结构升级为多通道结构）
 CONFIG="$STATE_DIR/config.json"
 if [ ! -f "$CONFIG" ]; then
-  PREV_CONFIG=""
-  for cand in "$HOME/.claude-tmux-bridge/config.json" "$HOME/.claude-feishu-tmux-bridge/config.json"; do
-    if [ -f "$cand" ]; then PREV_CONFIG="$cand"; break; fi
-  done
-  if [ -n "$PREV_CONFIG" ]; then
+  PREV_CONFIG="$HOME/.claude-feishu-tmux-bridge/config.json"
+  if [ -f "$PREV_CONFIG" ]; then
     cp "$PREV_CONFIG" "$CONFIG"
     echo "ℹ️  已从 $PREV_CONFIG 迁移配置"
   else
