@@ -36,7 +36,7 @@ export function createTelegramChannel({ config, stateDir, log, onListenerDown })
     // 注册命令菜单（输入框的 / 提示），best-effort
     api("setMyCommands", {
       commands: [
-        { command: "status", description: "桥状态：通道/工作区/当前轮/排队" },
+        { command: "status", description: "Cli 状态：通道/工作区/当前轮/排队" },
         { command: "cd", description: "切换工作区（/cd 列出可选项）" },
         { command: "clear", description: "清空 context（不重启进程）" },
         { command: "stop", description: "中断当前正在生成的回复" },

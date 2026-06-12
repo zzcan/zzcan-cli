@@ -62,7 +62,7 @@ cat > "$STATE_DIR/bridge-settings.json" << EOF
 }
 EOF
 
-BRIDGE_PROMPT='你正通过聊天桥（飞书/Telegram）与用户对话：你的每轮回复全文会被原样发送到用户手机上。请保持回复简洁、少用宽表格和长代码块。绝对不要使用 AskUserQuestion 工具（它会无限阻塞桥），需要用户决策时直接用文字提问。'
+BRIDGE_PROMPT='你正通过 zzcan-cli（飞书/Telegram 接入）与用户对话：你的每轮回复全文会被原样发送到用户手机上。请保持回复简洁、少用宽表格和长代码块。绝对不要使用 AskUserQuestion 工具（它会无限阻塞 Cli），需要用户决策时直接用文字提问。'
 
 # 窗口一律按名字定位（兼容 base-index 非 0 的用户配置）
 tmux new-session -d -s "$SESSION" -n claude -c "$WORKDIR" \
@@ -81,5 +81,5 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "❌ 启动失败，session 没起来"
   exit 1
 fi
-echo "✅ 桥已启动：claude @ $WORKDIR + daemon"
+echo "✅ Cli 已启动：claude @ $WORKDIR + daemon"
 echo "   观看/接管：tmux attach -t $SESSION   停止：bash $ROOT/stop.sh"

@@ -68,7 +68,7 @@ FILES=$(ls "$TMP/dry-run" | sort)
 # /status 是快路径会先回；两条对话回复必须严格有序
 E1=$(grep -l "echo: 第一条" "$TMP"/dry-run/* || true)
 E2=$(grep -l "echo: 第二条" "$TMP"/dry-run/* || true)
-ST=$(grep -l "bridge 状态" "$TMP"/dry-run/* || true)
+ST=$(grep -l "Cli 状态" "$TMP"/dry-run/* || true)
 [ -n "$E1" ] || { echo "FAIL: 缺第一条回复"; exit 1; }
 [ -n "$E2" ] || { echo "FAIL: 缺第二条回复"; exit 1; }
 [ -n "$ST" ] || { echo "FAIL: 缺 /status 回复"; exit 1; }

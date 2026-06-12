@@ -112,7 +112,7 @@ function chReceipt(msg) {
   adapters[msg.channel].receipt(msg);
 }
 async function notifyOwner(text) {
-  // 桥级通知发给每个通道的第一个白名单用户
+  // Cli 级通知发给每个通道的第一个白名单用户
   const f = config.channels.feishu;
   if (adapters.feishu && f.allowed_senders?.[0]) await chSend("feishu", f.allowed_senders[0], text);
   const t = config.channels.telegram;
@@ -338,7 +338,7 @@ function handleCommand(cmd, msg, arg = null) {
         resetSessionState();
         WORKDIR = dir;
         config.workdir = spaces[arg];
-        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); // 重启桥后仍在该工作区
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); // 重启 Cli 后仍在该工作区
         await chSend(msg.channel, msg.senderId, `✅ 已切到 ${arg} (${dir})，context 已清零`);
       });
       break;
@@ -373,7 +373,7 @@ function handleCommand(cmd, msg, arg = null) {
         : "空闲";
       enqueueIO(() => chSend(
         msg.channel, msg.senderId,
-        `📊 bridge 状态\n通道: ${channelLabels(", ")}\n工作区: ${WORKDIR}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
+        `📊 Cli 状态\n通道: ${channelLabels(", ")}\n工作区: ${WORKDIR}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
       ));
       break;
     }

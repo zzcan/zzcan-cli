@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# status.sh — 查看桥运行状态
+# status.sh — 查看 Cli 运行状态
 set -euo pipefail
 STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.zzcan-cli}"
 SESSION="zzcan-cli"

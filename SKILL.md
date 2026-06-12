@@ -1,6 +1,6 @@
 ---
 name: zzcan-cli
-description: IM（飞书/Telegram）↔ 本机 Claude Code 聊天桥。当用户说 启动聊天桥 / start bridge / 起桥 / 把飞书或 telegram 消息接到 claude 时使用。纯代码 daemon 路由，本 skill 只负责 start/stop/status/排障，不参与运行时。
+description: zzcan-cli：IM（飞书/Telegram）↔ 本机 Claude Code。当用户说 启动 cli / 启动 zzcan-cli / start cli / 把飞书或 telegram 消息接到 claude 时使用。纯代码 daemon 路由，本 skill 只负责 start/stop/status/排障，不参与运行时。
 ---
 
 # zzcan-cli
