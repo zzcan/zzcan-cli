@@ -1,0 +1,10 @@
+{
+  "name": "claude-tmux-bridge",
+  "version": "0.2.0",
+  "description": "Chat with your local Claude Code from Feishu/Telegram — zero-LLM-overhead routing via tmux injection and Stop hooks",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "bun test && bash tests/e2e-dry-run.sh && bash tests/e2e-telegram.sh"
+  }
+}
