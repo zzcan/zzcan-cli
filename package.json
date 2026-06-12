@@ -1,5 +1,5 @@
 {
-  "name": "claude-tmux-bridge",
+  "name": "zzcan-cli",
   "version": "0.2.0",
   "description": "Chat with your local Claude Code from Feishu/Telegram — zero-LLM-overhead routing via tmux injection and Stop hooks",
   "type": "module",

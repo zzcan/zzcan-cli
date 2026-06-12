@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
-// core/daemon.mjs — claude-tmux-bridge 编排器（通道无关）。
+// core/daemon.mjs — zzcan-cli 编排器（通道无关）。
 // 通道适配器（channels/*.mjs）收消息 → 过滤在适配器内 → 这里排队/注入 tmux →
 // Stop hook 写 outbox → 读 transcript 增量 → 回复路由回来源通道；支持通道级流式。
 //
 // 环境变量（测试用）：
-//   BRIDGE_STATE_DIR     状态目录（默认 ~/.claude-tmux-bridge）
+//   BRIDGE_STATE_DIR     状态目录（默认 ~/.zzcan-cli）
 //   BRIDGE_DRY_RUN=1     通道出站调用不真发（落 dry-run/ 文件）
 //   BRIDGE_LISTENER_CMD  feishu 适配器事件源覆盖（见 channels/feishu.mjs）
 //   BRIDGE_TG_API_BASE   telegram API 根覆盖（见 channels/telegram.mjs）
-//   BRIDGE_TMUX_TARGET   注入目标 pane（默认 claude-bridge:claude）
+//   BRIDGE_TMUX_TARGET   注入目标 pane（默认 zzcan-cli:claude）
 //   BRIDGE_PASTE_MODE    bracketed(默认)|plain —— e2e 假 claude 用 plain
 
 import {
@@ -25,10 +25,10 @@ import {
 import { createFeishuChannel } from "../channels/feishu.mjs";
 import { createTelegramChannel } from "../channels/telegram.mjs";
 
-const STATE_DIR = process.env.BRIDGE_STATE_DIR || join(homedir(), ".claude-tmux-bridge");
+const STATE_DIR = process.env.BRIDGE_STATE_DIR || join(homedir(), ".zzcan-cli");
 const DRY_RUN = process.env.BRIDGE_DRY_RUN === "1";
 // 按窗口名定位（用户 tmux 配了 base-index 1，索引不可靠）
-const TMUX_TARGET = process.env.BRIDGE_TMUX_TARGET || "claude-bridge:claude";
+const TMUX_TARGET = process.env.BRIDGE_TMUX_TARGET || "zzcan-cli:claude";
 const PASTE_MODE = process.env.BRIDGE_PASTE_MODE || "bracketed";
 const OUTBOX = join(STATE_DIR, "outbox.ndjson");
 const LOG_FILE = join(STATE_DIR, "bridge.log");
@@ -273,7 +273,7 @@ function dispatch(actions) {
         takeStream(state.lastAbandoned?.turnId);
         enqueueIO(() => chSend(
           a.msg.channel, a.msg.senderId,
-          "⚠️ 这条超过超时阈值还没回完，可能卡在等输入。发 /reset 重置，或电脑上 tmux attach -t claude-bridge 看看。",
+          "⚠️ 这条超过超时阈值还没回完，可能卡在等输入。发 /reset 重置，或电脑上 tmux attach -t zzcan-cli 看看。",
         ));
         break;
     }
@@ -389,7 +389,7 @@ function ensurePane(msg) {
     enqueueIO(() => chSend(msg.channel, msg.senderId, "⚠️ Claude 进程曾退出，已自动重启（context 清零），请重发刚才那条"));
   } catch (e) {
     log(`respawn failed: ${e}`);
-    enqueueIO(() => chSend(msg.channel, msg.senderId, "❌ Claude 进程不在且重启失败，请电脑上检查 tmux session claude-bridge"));
+    enqueueIO(() => chSend(msg.channel, msg.senderId, "❌ Claude 进程不在且重启失败，请电脑上检查 tmux session zzcan-cli"));
   }
   return false;
 }

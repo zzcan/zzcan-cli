@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # status.sh — 查看桥运行状态
 set -euo pipefail
-STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.claude-tmux-bridge}"
-SESSION="claude-bridge"
+STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.zzcan-cli}"
+SESSION="zzcan-cli"
 
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "❌ 未运行（无 tmux session ${SESSION}）"

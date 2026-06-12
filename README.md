@@ -1,4 +1,4 @@
-# claude-tmux-bridge
+# zzcan-cli
 
 把 IM 私聊（飞书 / Telegram）接到一个常驻的交互式 Claude Code session 上——在手机上和你电脑里的 Claude 对话。
 
@@ -16,7 +16,7 @@
 
 - **常驻交互式 session**：进程和 context 都是热的，没有每条消息冷启动 CLI / 重载 MCP 的开销；跑的是交互式 Claude Code，走订阅而非 API 计费。
 - **Stop hook 而非启发式**：Claude Code 的 Stop hook 在每轮回复结束时确定性触发并给出 transcript 路径——不需要 pane 静默检测、不需要猜"说完没"。
-- **tmux 是免费的观察窗**：`tmux attach -t claude-bridge` 随时看到/接管手机上那场对话。
+- **tmux 是免费的观察窗**：`tmux attach -t zzcan-cli` 随时看到/接管手机上那场对话。
 
 ## 特性
 
@@ -35,11 +35,11 @@
 ## 快速开始
 
 ```bash
-git clone https://github.com/<you>/claude-tmux-bridge && cd claude-tmux-bridge
-bash start.sh        # 首次运行生成 ~/.claude-tmux-bridge/config.json
+git clone https://github.com/<you>/zzcan-cli && cd zzcan-cli
+bash start.sh        # 首次运行生成 ~/.zzcan-cli/config.json
 ```
 
-编辑 `~/.claude-tmux-bridge/config.json`：
+编辑 `~/.zzcan-cli/config.json`：
 
 ```json
 {
