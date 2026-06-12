@@ -90,6 +90,8 @@ if (Object.keys(adapters).length === 0) {
   log("no channel enabled, exiting");
   process.exit(1);
 }
+// 对用户展示用的通道名（feishu → lark）
+const channelLabels = (sep) => Object.values(adapters).map((a) => a.displayName || a.name).join(sep);
 
 // ---- 出站（dry-run 时落文件不真发）----
 function dryWrite(kind, to, text) {
@@ -344,7 +346,7 @@ function handleCommand(cmd, msg) {
         : "空闲";
       enqueueIO(() => chSend(
         msg.channel, msg.senderId,
-        `📊 bridge 状态\n通道: ${Object.keys(adapters).join(", ")}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
+        `📊 bridge 状态\n通道: ${channelLabels(", ")}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
       ));
       break;
     }
@@ -401,6 +403,6 @@ for (const [name, adapter] of Object.entries(adapters)) {
 process.on("SIGTERM", () => { Object.values(adapters).forEach((a) => a.stop?.()); process.exit(0); });
 process.on("SIGINT", () => { Object.values(adapters).forEach((a) => a.stop?.()); process.exit(0); });
 if (!DRY_RUN) {
-  enqueueIO(() => notifyOwner(`✅ 桥已启动 (workdir: ${WORKDIR}, channels: ${Object.keys(adapters).join("+")})`));
+  enqueueIO(() => notifyOwner(`✅ Cli 已启动 (workdir: ${WORKDIR}, channels: ${channelLabels("+")})`));
 }
 log(`daemon started (channels: ${Object.keys(adapters).join(",")}${DRY_RUN ? ", DRY_RUN" : ""})`);

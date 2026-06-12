@@ -78,5 +78,5 @@ export function createFeishuChannel({ config, stateDir, log, onListenerDown }) {
     c.on("exit", (code) => { if (code !== 0) log(`feishu receipt failed msg=${msg.msgId} code=${code}`); });
   }
 
-  return { name: "feishu", start, send, receipt, stop: () => child?.kill() };
+  return { name: "feishu", displayName: "lark", start, send, receipt, stop: () => child?.kill() };
 }

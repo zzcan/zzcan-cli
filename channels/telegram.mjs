@@ -45,7 +45,8 @@ export function createTelegramChannel({ config, stateDir, log, onListenerDown })
             writeFileSync(OFFSET_FILE, String(offset));
             const r = parseTelegramUpdate(u, config);
             if (r.action === "skip") {
-              if (r.reason !== "type") log(`telegram skip ${r.reason}`);
+              // sender 拒绝时带上来访 id，方便 onboarding 时从日志抄白名单
+              if (r.reason !== "type") log(`telegram skip ${r.reason}${r.reason === "sender" ? ` from=${u.message?.from?.id}` : ""}`);
               if (r.reason === "nontext" && u.message?.chat?.type === "private"
                   && config.allowed_user_ids?.includes(u.message?.from?.id)) {
                 onMessage({ channel: "telegram", senderId: u.message.from.id, text: null, msgId: u.message.message_id, nontext: true });
@@ -121,5 +122,5 @@ export function createTelegramChannel({ config, stateDir, log, onListenerDown })
     },
   };
 
-  return { name: "telegram", start, send, receipt, stream, stop: () => { stopped = true; } };
+  return { name: "telegram", displayName: "telegram", start, send, receipt, stream, stop: () => { stopped = true; } };
 }
