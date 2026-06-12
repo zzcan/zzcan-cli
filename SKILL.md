@@ -33,4 +33,4 @@ description: tmux 注入式飞书桥（纯代码路由，零 LLM 开销）。当
 - 日志：`bridge.log`（daemon 结构化日志）、`daemon.out`（daemon stdout/stderr 原样）。
 - 没回复：1) `status.sh` 看两个 pane 是否存活；2) 看 bridge.log 是否有 `skip sender`（open_id 不在白名单）；3) `tmux attach -t feishu-bridge` 直接看 claude 在干嘛（看完 `Ctrl-b d` detach，别 exit）。
 - claude 卡在等输入：attach 进去手动处理，或手机发 `/reset`。
-- 历史：旧的 LLM 路由版 feishu-bridge skill 已于 2026-06-12 删除（备份 /tmp/feishu-bridge-skill-backup-20260612.tgz）；start.sh 里对它的互斥检查保留无害。
+- 历史：旧的 LLM 路由版 feishu-bridge skill 已于 2026-06-12 删除；start.sh 里对它的互斥检查保留无害。
