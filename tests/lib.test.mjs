@@ -86,15 +86,23 @@ test("parseTranscriptDelta returns empty string when no assistant text", () => {
 
 // ---- matchCommand ----
 test("matchCommand recognizes built-in commands with surrounding whitespace", () => {
-  expect(matchCommand(" /reset ")).toBe("reset");
-  expect(matchCommand("/clear")).toBe("clear");
-  expect(matchCommand("/stop")).toBe("stop");
-  expect(matchCommand("/status")).toBe("status");
+  expect(matchCommand(" /reset ")).toEqual({ cmd: "reset", arg: null });
+  expect(matchCommand("/clear")).toEqual({ cmd: "clear", arg: null });
+  expect(matchCommand("/stop")).toEqual({ cmd: "stop", arg: null });
+  expect(matchCommand("/status")).toEqual({ cmd: "status", arg: null });
+});
+
+test("matchCommand parses /cd with and without workspace name", () => {
+  expect(matchCommand("/cd beukay")).toEqual({ cmd: "cd", arg: "beukay" });
+  expect(matchCommand(" /cd  codes ")).toEqual({ cmd: "cd", arg: "codes" });
+  expect(matchCommand("/cd")).toEqual({ cmd: "cd", arg: null });
 });
 
 test("matchCommand returns null for normal text and partial matches", () => {
   expect(matchCommand("帮我 /reset 一下")).toBe(null);
   expect(matchCommand("/resetall")).toBe(null);
+  expect(matchCommand("/reset now")).toBe(null);
+  expect(matchCommand("/cdrom")).toBe(null);
   expect(matchCommand("你好")).toBe(null);
 });
 

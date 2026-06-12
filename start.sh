@@ -25,6 +25,7 @@ if [ ! -f "$CONFIG" ]; then
   else
     jq -n '{
       workdir: "~/Desktop/workspace",
+      workspaces: {},
       turn_timeout_seconds: 300,
       max_reply_chars: 20000,
       channels: {

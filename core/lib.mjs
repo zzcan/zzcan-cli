@@ -56,13 +56,17 @@ export function parseTranscriptDelta(jsonlText) {
   return parts.join("\n\n");
 }
 
-// daemon 内置命令：消息整体（trim 后）精确等于命令才命中，其余一律当对话注入。
+// daemon 内置命令。无参命令要求消息整体（trim 后）精确等于命令；
+// /cd 可带一个工作区名。其余文本一律当对话注入。
 const COMMANDS = ["reset", "clear", "stop", "status"];
 export function matchCommand(text) {
   const t = text.trim();
   for (const c of COMMANDS) {
-    if (t === "/" + c) return c;
+    if (t === "/" + c) return { cmd: c, arg: null };
   }
+  if (t === "/cd") return { cmd: "cd", arg: null };
+  const m = t.match(/^\/cd\s+(\S+)$/);
+  if (m) return { cmd: "cd", arg: m[1] };
   return null;
 }
 

@@ -21,7 +21,7 @@ description: IM（飞书/Telegram）↔ 本机 Claude Code 聊天桥。当用户
 
 ## 手机端可用命令（daemon 处理，不进 Claude）
 
-`/reset`（重启 claude，context 归零）、`/clear`（清 context 不重启）、`/stop`（中断当前轮）、`/status`。
+`/reset`（重启 claude，context 归零）、`/clear`（清 context 不重启）、`/stop`（中断当前轮）、`/status`、`/cd <名字>`（切到 config workspaces 里登记的工作区，context 清零；`/cd` 单发列出可选项）。
 
 ## 排障
 

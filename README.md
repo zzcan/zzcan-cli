@@ -24,7 +24,7 @@
 - Telegram 流式输出（占位消息 + 增量编辑，超 4096 字符自动滚动到新消息）；飞书一次性全文 + 表情回执
 - 白名单（飞书 open_id / Telegram user id），仅私聊、仅文本
 - 严格串行队列：连发多条按序处理，互不串扰
-- 内置命令（不进 Claude，daemon 纯代码处理）：`/reset` 重启 claude、`/clear` 清 context、`/stop` 中断当前轮、`/status`
+- 内置命令（不进 Claude，daemon 纯代码处理）：`/reset` 重启 claude、`/clear` 清 context、`/stop` 中断当前轮、`/status`、`/cd <名字>` 切换预登记的工作区（config 的 `workspaces` 映射；切换会重启 claude、context 清零）
 - claude 进程死亡自动 respawn；监听断线自动重连并告警；单轮超时提醒
 - 大陆环境：Telegram 走 `proxy` 配置或 `HTTPS_PROXY`
 

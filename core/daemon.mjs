@@ -43,8 +43,9 @@ function log(msg) {
 }
 
 // ---- config（自动迁移飞书单通道时代的旧结构）----
+const CONFIG_PATH = join(STATE_DIR, "config.json");
 function loadConfig() {
-  const path = join(STATE_DIR, "config.json");
+  const path = CONFIG_PATH;
   const raw = JSON.parse(readFileSync(path, "utf8"));
   if (raw.channels) return raw;
   const migrated = {
@@ -63,7 +64,7 @@ function loadConfig() {
 const config = loadConfig();
 const TIMEOUT_MS = (config.turn_timeout_seconds ?? 300) * 1000;
 const MAX_REPLY_CHARS = config.max_reply_chars ?? 20000;
-const WORKDIR = (config.workdir || "~").replace(/^~/, homedir());
+let WORKDIR = (config.workdir || "~").replace(/^~/, homedir()); // /cd 会更新并持久化
 
 // ---- IO 串行链（出站顺序保证）----
 let ioChain = Promise.resolve();
@@ -286,7 +287,7 @@ function onMessage(msg) {
     return;
   }
   const cmd = matchCommand(msg.text);
-  if (cmd) return handleCommand(cmd, msg);
+  if (cmd) return handleCommand(cmd.cmd, msg, cmd.arg);
   if (!ensurePane(msg)) return;
   const { state: s2, actions } = queueEvent(state, { type: "message", msg, now: Date.now() });
   state = s2;
@@ -313,9 +314,35 @@ function resetSessionState() {
   turnOffsets.clear();
 }
 
-function handleCommand(cmd, msg) {
-  log(`command /${cmd} from ${msg.channel}:${msg.senderId}`);
+function handleCommand(cmd, msg, arg = null) {
+  log(`command /${cmd}${arg ? " " + arg : ""} from ${msg.channel}:${msg.senderId}`);
   switch (cmd) {
+    case "cd": {
+      const spaces = config.workspaces || {};
+      const list = Object.entries(spaces).map(([k, v]) => `${k} → ${v}`).join("\n") || "（未登记，编辑 config.json 的 workspaces）";
+      if (!arg) {
+        enqueueIO(() => chSend(msg.channel, msg.senderId, `📂 当前: ${WORKDIR}\n可切换:\n${list}`));
+        break;
+      }
+      if (!spaces[arg]) {
+        enqueueIO(() => chSend(msg.channel, msg.senderId, `❌ 未登记的工作区 ${arg}。可选:\n${list}`));
+        break;
+      }
+      const dir = spaces[arg].replace(/^~/, homedir());
+      if (!existsSync(dir)) {
+        enqueueIO(() => chSend(msg.channel, msg.senderId, `❌ 目录不存在: ${dir}`));
+        break;
+      }
+      enqueueIO(async () => {
+        tmux("respawn-window", "-k", "-c", dir, "-t", TMUX_TARGET);
+        resetSessionState();
+        WORKDIR = dir;
+        config.workdir = spaces[arg];
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); // 重启桥后仍在该工作区
+        await chSend(msg.channel, msg.senderId, `✅ 已切到 ${arg} (${dir})，context 已清零`);
+      });
+      break;
+    }
     case "reset":
       enqueueIO(async () => {
         tmux("respawn-window", "-k", "-t", TMUX_TARGET);
@@ -346,7 +373,7 @@ function handleCommand(cmd, msg) {
         : "空闲";
       enqueueIO(() => chSend(
         msg.channel, msg.senderId,
-        `📊 bridge 状态\n通道: ${channelLabels(", ")}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
+        `📊 bridge 状态\n通道: ${channelLabels(", ")}\n工作区: ${WORKDIR}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
       ));
       break;
     }
