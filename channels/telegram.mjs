@@ -33,6 +33,16 @@ export function createTelegramChannel({ config, stateDir, log, onListenerDown })
   }
 
   function start(onMessage) {
+    // 注册命令菜单（输入框的 / 提示），best-effort
+    api("setMyCommands", {
+      commands: [
+        { command: "status", description: "桥状态：通道/工作区/当前轮/排队" },
+        { command: "cd", description: "切换工作区（/cd 列出可选项）" },
+        { command: "clear", description: "清空 context（不重启进程）" },
+        { command: "stop", description: "中断当前正在生成的回复" },
+        { command: "reset", description: "重启 Claude，context 归零" },
+      ],
+    }).catch((e) => log(`telegram setMyCommands failed: ${e.message || e}`));
     let offset = existsSync(OFFSET_FILE) ? parseInt(readFileSync(OFFSET_FILE, "utf8"), 10) || 0 : 0;
     let failStreak = 0;
     (async () => {
