@@ -19,9 +19,10 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
-  parseTranscriptDelta, matchCommand, truncateReply,
+  parseTranscriptDelta, parseLastTurnDelta, matchCommand, truncateReply,
   createQueueState, queueEvent,
 } from "./lib.mjs";
+import { createStreamSlot } from "./stream.mjs";
 import { createFeishuChannel } from "../channels/feishu.mjs";
 import { createTelegramChannel } from "../channels/telegram.mjs";
 
@@ -179,9 +180,16 @@ function readRange(path, from) {
 function readDelta(turnId, eventPath) {
   let from = turnOffsets.get(turnId) ?? 0;
   turnOffsets.delete(turnId);
-  if (transcriptPath !== eventPath) from = 0; // session 变了（/clear 等），整文件兜底
+  // session 变了（/clear、auto-compact 等）→ from=0 兜底，但只取最后一轮，
+  // 防止把整段历史对话当回复发出去
+  let lastTurnOnly = false;
+  if (transcriptPath !== eventPath) {
+    from = 0;
+    lastTurnOnly = true;
+  }
   transcriptPath = eventPath;
-  return parseTranscriptDelta(readRange(eventPath, from));
+  const raw = readRange(eventPath, from);
+  return lastTurnOnly ? parseLastTurnDelta(raw) : parseTranscriptDelta(raw);
 }
 // 流式 peek：不消费 offset、不改 transcriptPath
 function peekDelta(turnId) {
@@ -191,54 +199,36 @@ function peekDelta(turnId) {
   return parseTranscriptDelta(readRange(transcriptPath, from));
 }
 
-// ---- 流式驱动（adapter 提供 stream 才启用）----
-const streams = new Map(); // turnId → {handle, channel, timer, updating}
+// ---- 流式驱动（adapter 提供 stream 才启用；竞态防护在 core/stream.mjs 的链式槽里）----
+const streams = new Map(); // turnId → {slot, timer}
 function startStream(turnId, msg) {
   const adapter = adapters[msg.channel];
   if (!adapter?.stream || DRY_RUN) return;
-  const st = { handle: null, channel: msg.channel, timer: null, updating: false };
-  streams.set(turnId, st);
+  const entry = { slot: createStreamSlot(adapter.stream, { log }), timer: null };
+  streams.set(turnId, entry);
   enqueueIO(async () => {
-    if (!streams.has(turnId)) return; // 已被 takeStream 取消
-    try {
-      st.handle = await adapter.stream.begin(msg.senderId);
-    } catch (e) {
-      log(`stream begin failed (${msg.channel}): ${e.message || e}`);
-      streams.delete(turnId);
-      return;
-    }
-    st.timer = setInterval(async () => {
-      if (st.updating) return;
-      const text = peekDelta(turnId);
-      if (!text) return;
-      st.updating = true;
-      try {
-        await adapter.stream.update(st.handle, text);
-      } catch (e) {
-        log(`stream update failed: ${e.message || e}`);
-      } finally {
-        st.updating = false;
-      }
-    }, STREAM_INTERVAL_MS);
+    if (!streams.has(turnId)) return; // 已被 takeStream 取走（超时/重置）
+    await entry.slot.start(msg.senderId);
+    entry.timer = setInterval(() => entry.slot.tick(() => peekDelta(turnId)), STREAM_INTERVAL_MS);
   });
 }
+// 取走该轮的流式槽（停 tick 定时器）；finish 路径用 slot.finish 收尾，丢弃路径用 slot.cancel
 function takeStream(turnId) {
-  const st = streams.get(turnId);
-  if (!st) return null;
+  const entry = streams.get(turnId);
+  if (!entry) return null;
   streams.delete(turnId);
-  if (st.timer) clearInterval(st.timer);
-  return st;
+  if (entry.timer) clearInterval(entry.timer);
+  return entry.slot;
 }
 
 // ---- 队列编排 ----
 let state = createQueueState();
 
-async function deliverReply(turn, st, reply, { late = false } = {}) {
+async function deliverReply(turn, slot, reply, { late = false } = {}) {
   const prefix = late ? "🕐 迟到的回复：\n" : "";
   const text = truncateReply(prefix + (reply || ""), MAX_REPLY_CHARS);
-  if (st?.handle) {
-    await adapters[st.channel].stream.end(st.handle, text);
-  } else if (reply) {
+  if (slot && await slot.finish(text)) return; // 终稿已由流式消息承载
+  if (reply) {
     await chSend(turn.msg.channel, turn.msg.senderId, text);
   } else {
     log(`turn=${turn.turnId}: empty reply, skip send`);
@@ -270,7 +260,7 @@ function dispatch(actions) {
         break;
       }
       case "notifyTimeout":
-        takeStream(state.lastAbandoned?.turnId);
+        takeStream(state.lastAbandoned?.turnId)?.cancel();
         enqueueIO(() => chSend(
           a.msg.channel, a.msg.senderId,
           "⚠️ 这条超过超时阈值还没回完，可能卡在等输入。发 /reset 重置，或电脑上 tmux attach -t zzcan-cli 看看。",
@@ -308,7 +298,7 @@ function onStopEvent(ev) {
 }
 
 function resetSessionState() {
-  for (const turnId of [...streams.keys()]) takeStream(turnId);
+  for (const turnId of [...streams.keys()]) takeStream(turnId)?.cancel();
   state = createQueueState();
   transcriptPath = null;
   turnOffsets.clear();
@@ -359,7 +349,7 @@ function handleCommand(cmd, msg, arg = null) {
       break;
     case "stop": {
       enqueueIO(() => tmux("send-keys", "-t", TMUX_TARGET, "Escape"));
-      if (state.current) takeStream(state.current.turnId);
+      if (state.current) takeStream(state.current.turnId)?.cancel();
       const { state: s2, actions } = queueEvent(state, { type: "interrupt", now: Date.now() });
       state = s2;
       enqueueIO(() => chSend(msg.channel, msg.senderId, "⏹ 已中断当前轮"));

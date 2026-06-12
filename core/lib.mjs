@@ -198,3 +198,25 @@ export function nextStreamStep(shown, full, maxChars) {
   const [finalize, ...rest] = splitForTelegram(full, maxChars);
   return { type: "rollover", finalize, carry: rest.join("\n") };
 }
+
+// from=0 兜底读取（session 切换/auto-compact 后路径变了）时使用：
+// 只取“最后一条真人消息”之后的 assistant 文本，防止把整段历史当回复发出去。
+// 注意：一轮之内的 tool_result 也是 type:"user" 行，不算真人消息。
+export function parseLastTurnDelta(jsonlText) {
+  const lines = jsonlText.split("\n");
+  let lastHumanIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    let entry;
+    try {
+      entry = JSON.parse(lines[i]);
+    } catch {
+      continue;
+    }
+    if (entry?.type !== "user") continue;
+    const content = entry.message?.content;
+    const isToolResult = Array.isArray(content) && content.some((b) => b?.type === "tool_result");
+    if (!isToolResult) lastHumanIdx = i;
+  }
+  return parseTranscriptDelta(lines.slice(lastHumanIdx + 1).join("\n"));
+}

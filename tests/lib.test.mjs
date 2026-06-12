@@ -274,3 +274,40 @@ test("nextStreamStep rolls over when text exceeds limit", () => {
   const full = "aaa\nbbb\nccc";
   expect(nextStreamStep("aaa", full, 8)).toEqual({ type: "rollover", finalize: "aaa\nbbb", carry: "ccc" });
 });
+
+// ---- parseLastTurnDelta（from=0 兜底只取最后一轮，防把历史全文当回复）----
+import { parseLastTurnDelta } from "../core/lib.mjs";
+
+function human(text) {
+  return JSON.stringify({ type: "user", message: { content: text } });
+}
+function toolResult() {
+  return JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "x" }] } });
+}
+
+test("parseLastTurnDelta only returns assistant text after the last human message", () => {
+  const jsonl = [
+    human("第一问"),
+    asst({ type: "text", text: "旧回答" }),
+    human("第二问"),
+    asst({ type: "text", text: "新回答" }),
+  ].join("\n");
+  expect(parseLastTurnDelta(jsonl)).toBe("新回答");
+});
+
+test("parseLastTurnDelta does not cut at tool_result entries within the turn", () => {
+  const jsonl = [
+    human("旧问题"),
+    asst({ type: "text", text: "旧回答" }),
+    human("新问题"),
+    asst({ type: "text", text: "先说一句" }, { type: "tool_use", name: "Bash", input: {} }),
+    toolResult(),
+    asst({ type: "text", text: "再说结论" }),
+  ].join("\n");
+  expect(parseLastTurnDelta(jsonl)).toBe("先说一句\n\n再说结论");
+});
+
+test("parseLastTurnDelta falls back to all assistant text when no human entry", () => {
+  const jsonl = asst({ type: "text", text: "唯一回复" });
+  expect(parseLastTurnDelta(jsonl)).toBe("唯一回复");
+});
