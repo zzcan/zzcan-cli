@@ -15,15 +15,10 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   exit 0
 fi
 
-# 初始化 config：优先从上一代状态目录迁移（daemon 会再把旧结构升级为多通道结构）
+# 初始化 config
 CONFIG="$STATE_DIR/config.json"
 if [ ! -f "$CONFIG" ]; then
-  PREV_CONFIG="$HOME/.claude-feishu-tmux-bridge/config.json"
-  if [ -f "$PREV_CONFIG" ]; then
-    cp "$PREV_CONFIG" "$CONFIG"
-    echo "ℹ️  已从 $PREV_CONFIG 迁移配置"
-  else
-    jq -n '{
+  jq -n '{
       workdir: "~/Desktop/workspace",
       workspaces: {},
       turn_timeout_seconds: 300,
@@ -32,9 +27,8 @@ if [ ! -f "$CONFIG" ]; then
         feishu:   { enabled: true, allowed_senders: [], receipt_emoji: "OnIt" },
         telegram: { enabled: false, bot_token: "", allowed_user_ids: [], proxy: "" }
       }
-    }' > "$CONFIG"
-    echo "ℹ️  已生成 ${CONFIG}（填入通道白名单后重跑）"
-  fi
+  }' > "$CONFIG"
+  echo "ℹ️  已生成 ${CONFIG}（填入通道白名单后重跑）"
 fi
 
 # 至少要有一个可用通道
