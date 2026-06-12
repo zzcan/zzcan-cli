@@ -39,7 +39,7 @@ if [ ! -f "$CONFIG" ]; then
     max_reply_chars: 20000,
     receipt_emoji: "OnIt"
   }' > "$CONFIG"
-  echo "ℹ️  已生成 $CONFIG（workdir 默认 ~/Desktop/workspace，可改后重启）"
+  echo "ℹ️  已生成 ${CONFIG}（workdir 默认 ~/Desktop/workspace，可改后重启）"
 fi
 
 SENDER_COUNT=$(jq '.allowed_senders | length' "$CONFIG")

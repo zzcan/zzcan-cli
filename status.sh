@@ -5,7 +5,7 @@ STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.claude-feishu-tmux-bridge}"
 SESSION="feishu-bridge"
 
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-  echo "❌ 未运行（无 tmux session $SESSION）"
+  echo "❌ 未运行（无 tmux session ${SESSION}）"
   exit 1
 fi
 
