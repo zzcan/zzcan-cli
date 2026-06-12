@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { filterEvent } from "../lib.mjs";
+import { filterEvent } from "../core/lib.mjs";
 
 const CONFIG = { allowed_senders: ["ou_me"] };
 
@@ -55,7 +55,7 @@ test("filterEvent skips unrelated event types", () => {
 });
 
 // ---- parseTranscriptDelta ----
-import { parseTranscriptDelta, matchCommand, truncateReply } from "../lib.mjs";
+import { parseTranscriptDelta, matchCommand, truncateReply } from "../core/lib.mjs";
 
 function asst(...blocks) {
   return JSON.stringify({ type: "assistant", message: { content: blocks } });
@@ -109,7 +109,7 @@ test("truncateReply cuts long text and marks truncation", () => {
 });
 
 // ---- queue state machine ----
-import { createQueueState, queueEvent } from "../lib.mjs";
+import { createQueueState, queueEvent } from "../core/lib.mjs";
 
 const m1 = { openId: "ou_me", text: "一", msgId: "om_a" };
 const m2 = { openId: "ou_me", text: "二", msgId: "om_b" };
@@ -194,7 +194,7 @@ test("interrupt while idle does nothing", () => {
 });
 
 // ---- createLineSplitter ----
-import { createLineSplitter } from "../lib.mjs";
+import { createLineSplitter } from "../core/lib.mjs";
 
 test("line splitter assembles lines across chunk boundaries", () => {
   const got = [];
@@ -211,4 +211,58 @@ test("line splitter handles Buffer chunks and multi-line chunks", () => {
   const feed = createLineSplitter((l) => got.push(l));
   feed(Buffer.from("一\n二\n三\n"));
   expect(got).toEqual(["一", "二", "三"]);
+});
+
+// ---- telegram helpers ----
+import { splitForTelegram, parseTelegramUpdate, nextStreamStep } from "../core/lib.mjs";
+
+test("splitForTelegram keeps short text as single chunk", () => {
+  expect(splitForTelegram("hi", 4096)).toEqual(["hi"]);
+});
+
+test("splitForTelegram splits at newline boundary when possible", () => {
+  const text = "aaa\nbbb\nccc";
+  expect(splitForTelegram(text, 8)).toEqual(["aaa\nbbb", "ccc"]);
+});
+
+test("splitForTelegram hard-splits when no newline in window", () => {
+  expect(splitForTelegram("a".repeat(10), 4)).toEqual(["aaaa", "aaaa", "aa"]);
+});
+
+const TG_CONFIG = { allowed_user_ids: [111] };
+function tgUpdate({ from = 111, chatType = "private", text = "hi", msgId = 9, chatId = 111 } = {}) {
+  return { update_id: 1, message: { message_id: msgId, from: { id: from }, chat: { id: chatId, type: chatType }, text } };
+}
+
+test("parseTelegramUpdate allows whitelisted private text message", () => {
+  expect(parseTelegramUpdate(tgUpdate(), TG_CONFIG)).toEqual({
+    action: "allow", senderId: 111, text: "hi", msgId: 9,
+  });
+});
+
+test("parseTelegramUpdate skips non-whitelisted user", () => {
+  expect(parseTelegramUpdate(tgUpdate({ from: 222 }), TG_CONFIG)).toEqual({ action: "skip", reason: "sender" });
+});
+
+test("parseTelegramUpdate skips group chats and non-text", () => {
+  expect(parseTelegramUpdate(tgUpdate({ chatType: "group" }), TG_CONFIG)).toEqual({ action: "skip", reason: "group" });
+  const noText = tgUpdate(); delete noText.message.text;
+  expect(parseTelegramUpdate(noText, TG_CONFIG)).toEqual({ action: "skip", reason: "nontext" });
+});
+
+test("parseTelegramUpdate skips updates without message", () => {
+  expect(parseTelegramUpdate({ update_id: 2 }, TG_CONFIG)).toEqual({ action: "skip", reason: "type" });
+});
+
+test("nextStreamStep noop when text unchanged", () => {
+  expect(nextStreamStep("abc", "abc", 4096)).toEqual({ type: "noop" });
+});
+
+test("nextStreamStep edits when text grew within limit", () => {
+  expect(nextStreamStep("ab", "abcd", 4096)).toEqual({ type: "edit", text: "abcd" });
+});
+
+test("nextStreamStep rolls over when text exceeds limit", () => {
+  const full = "aaa\nbbb\nccc";
+  expect(nextStreamStep("aaa", full, 8)).toEqual({ type: "rollover", finalize: "aaa\nbbb", carry: "ccc" });
 });

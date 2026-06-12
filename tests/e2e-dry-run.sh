@@ -35,7 +35,7 @@ EVENTS="$TMP/events.ndjson"
 touch "$EVENTS"
 BRIDGE_DRY_RUN=1 BRIDGE_STATE_DIR="$TMP" BRIDGE_TMUX_TARGET="$SESSION:fake" BRIDGE_PASTE_MODE=plain \
   BRIDGE_LISTENER_CMD="tail -n +1 -F '$EVENTS'" \
-  bun "$SKILL_DIR/daemon.mjs" >> "$TMP/daemon.out" 2>&1 &
+  bun "$SKILL_DIR/core/daemon.mjs" >> "$TMP/daemon.out" 2>&1 &
 DAEMON_PID=$!
 
 event() {
