@@ -2,13 +2,22 @@
 // listen = spawn lark-cli event +subscribe（BRIDGE_LISTENER_CMD 可覆盖，e2e 用）
 // send   = lark-cli im +messages-send（重试 5/15/45s）
 // receipt= 消息表情回应（best-effort）
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLineSplitter } from "../core/lib.mjs";
 import { filterEvent } from "./feishu.logic.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 异步跑 lark-cli（spawnSync 会阻塞事件循环几百 ms，拖累其他通道的轮询/流式）
+function runLarkCli(args) {
+  return new Promise((resolve) => {
+    const c = spawn("lark-cli", args, { stdio: "ignore" });
+    c.on("exit", (code) => resolve(code === 0));
+    c.on("error", () => resolve(false));
+  });
+}
 
 export function createFeishuChannel({ config, stateDir, log, onListenerDown }) {
   const SEEN_FILE = join(stateDir, "feishu-seen-ids.txt");
@@ -58,12 +67,12 @@ export function createFeishuChannel({ config, stateDir, log, onListenerDown }) {
     const delays = [5000, 15000, 45000];
     const idempotency = `tmux-bridge-${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     for (let i = 0; i < 3; i++) {
-      const r = spawnSync("lark-cli", [
+      const ok = await runLarkCli([
         "im", "+messages-send", "--as", "bot",
         "--user-id", senderId, "--text", text,
         "--idempotency-key", idempotency,
-      ], { stdio: "ignore" });
-      if (r.status === 0) return true;
+      ]);
+      if (ok) return true;
       if (i < 2) await sleep(delays[i]);
     }
     log(`feishu send FAILED to=${senderId} len=${text.length}`);
