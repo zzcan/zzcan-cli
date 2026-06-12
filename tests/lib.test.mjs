@@ -177,3 +177,38 @@ test("reset clears queue, current and abandoned", () => {
   expect(actions).toEqual([]);
   expect(state).toEqual(createQueueState());
 });
+
+test("interrupt drops current and abandoned, then injects next from queue", () => {
+  let s = queueEvent(createQueueState(), { type: "message", msg: m1, now: 1000 }).state;
+  s = queueEvent(s, { type: "message", msg: m2, now: 1001 }).state;
+  const { state, actions } = queueEvent(s, { type: "interrupt", now: 1002 });
+  expect(actions).toEqual([{ type: "inject", msg: m2, turnId: 2 }]);
+  expect(state.current.turnId).toBe(2);
+  expect(state.lastAbandoned).toBe(null);
+});
+
+test("interrupt while idle does nothing", () => {
+  const { state, actions } = queueEvent(createQueueState(), { type: "interrupt", now: 1 });
+  expect(actions).toEqual([]);
+  expect(state.current).toBe(null);
+});
+
+// ---- createLineSplitter ----
+import { createLineSplitter } from "../lib.mjs";
+
+test("line splitter assembles lines across chunk boundaries", () => {
+  const got = [];
+  const feed = createLineSplitter((l) => got.push(l));
+  feed('{"a":1}\n{"b"');
+  feed(':2}\n');
+  feed('{"c":3}');
+  feed("\n\n");
+  expect(got).toEqual(['{"a":1}', '{"b":2}', '{"c":3}']);
+});
+
+test("line splitter handles Buffer chunks and multi-line chunks", () => {
+  const got = [];
+  const feed = createLineSplitter((l) => got.push(l));
+  feed(Buffer.from("一\n二\n三\n"));
+  expect(got).toEqual(["一", "二", "三"]);
+});

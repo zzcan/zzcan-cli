@@ -126,9 +126,33 @@ export function queueEvent(state, event) {
       }
       break;
 
+    case "interrupt":
+      // /stop：丢弃当前轮与 abandoned（Escape 已打断 claude），队列保留并继续
+      s.lastAbandoned = null;
+      if (s.current) {
+        s.current = null;
+        injectNext(event.now);
+      }
+      break;
+
     case "reset":
       return { state: createQueueState(), actions: [] };
   }
 
   return { state: s, actions };
+}
+
+// 有状态行分割器：替代 node:readline（Bun 兼容层在 FIFO/pipe 上有丢行风险）。
+// 返回 feed(chunk)；每凑齐一行（去掉 \n，跳过空行）回调一次。
+export function createLineSplitter(onLine) {
+  let buf = "";
+  return function feed(chunk) {
+    buf += chunk.toString("utf8");
+    let idx;
+    while ((idx = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, idx);
+      buf = buf.slice(idx + 1);
+      if (line.trim()) onLine(line);
+    }
+  };
 }
