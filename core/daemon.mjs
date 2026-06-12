@@ -68,17 +68,22 @@ const TIMEOUT_MS = (config.turn_timeout_seconds ?? 300) * 1000;
 const MAX_REPLY_CHARS = config.max_reply_chars ?? 20000;
 let WORKDIR = (config.workdir || "~").replace(/^~/, homedir()); // /cd 会更新并持久化
 
-// ---- IO 串行链（出站顺序保证）----
-let ioChain = Promise.resolve();
+// ---- IO 链 ----
+// core 链：tmux 注入 / transcript 读取等轮次生命周期，必须全局串行。
+// 每通道一条出站链：一个通道的发送重试（最长 65s）不拖累另一个通道。
+const chains = new Map();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-function enqueueIO(fn) {
-  ioChain = ioChain.then(fn).catch((e) => log(`IO error: ${e?.stack || e}`));
+function enqueue(key, fn) {
+  const next = (chains.get(key) || Promise.resolve()).then(fn).catch((e) => log(`IO error [${key}]: ${e?.stack || e}`));
+  chains.set(key, next);
 }
+const enqueueIO = (fn) => enqueue("core", fn);
+const enqueueCh = (channel, fn) => enqueue(`ch:${channel}`, fn);
 
 // ---- 通道注册 ----
 const adapters = {};
 const onListenerDown = (name) =>
-  enqueueIO(() => notifyOwner(`⚠️ ${name} 监听连续掉线重试中，可能漏消息，检查 bridge.log`));
+  notifyOwner(`⚠️ ${name} 监听连续掉线重试中，可能漏消息，检查 bridge.log`);
 if (config.channels.feishu?.enabled) {
   adapters.feishu = createFeishuChannel({ config: config.channels.feishu, stateDir: STATE_DIR, log, onListenerDown });
 }
@@ -113,12 +118,12 @@ function chReceipt(msg) {
   if (DRY_RUN) { log(`DRY_RUN receipt msg=${msg.msgId}`); return; }
   adapters[msg.channel].receipt(msg);
 }
-async function notifyOwner(text) {
-  // Cli 级通知发给每个通道的第一个白名单用户
+function notifyOwner(text) {
+  // Cli 级通知发给每个通道的第一个白名单用户（各走自己的链）
   const f = config.channels.feishu;
-  if (adapters.feishu && f.allowed_senders?.[0]) await chSend("feishu", f.allowed_senders[0], text);
+  if (adapters.feishu && f.allowed_senders?.[0]) enqueueCh("feishu", () => chSend("feishu", f.allowed_senders[0], text));
   const t = config.channels.telegram;
-  if (adapters.telegram && t.allowed_user_ids?.[0]) await chSend("telegram", t.allowed_user_ids[0], text);
+  if (adapters.telegram && t.allowed_user_ids?.[0]) enqueueCh("telegram", () => chSend("telegram", t.allowed_user_ids[0], text));
 }
 
 // ---- tmux ----
@@ -208,7 +213,7 @@ function startStream(turnId, msg) {
   if (!adapter?.stream || DRY_RUN) return;
   const entry = { slot: createStreamSlot(adapter.stream, { log }), timer: null };
   streams.set(turnId, entry);
-  enqueueIO(async () => {
+  enqueueCh(msg.channel, async () => {
     if (!streams.has(turnId)) return; // 已被 takeStream 取走（超时/重置）
     await entry.slot.start(msg.senderId);
     entry.timer = setInterval(() => entry.slot.tick(() => peekDelta(turnId)), STREAM_INTERVAL_MS);
@@ -254,16 +259,19 @@ function dispatch(actions) {
       case "finish":
       case "lateFinish": {
         const st = takeStream(a.turn.turnId);
-        enqueueIO(async () => {
+        const late = a.type === "lateFinish";
+        enqueueIO(() => {
+          // transcript 读取留在 core 链（必须先于下一个 inject 更新 transcriptPath）；
+          // 发送切到通道链，不阻塞后续注入
           const reply = readDelta(a.turn.turnId, a.path);
-          await deliverReply(a.turn, st, reply, { late: a.type === "lateFinish" });
           log(`${a.type} turn=${a.turn.turnId} ch=${a.turn.msg.channel} len=${reply.length}`);
+          enqueueCh(a.turn.msg.channel, () => deliverReply(a.turn, st, reply, { late }));
         });
         break;
       }
       case "notifyTimeout":
         takeStream(state.lastAbandoned?.turnId)?.cancel();
-        enqueueIO(() => chSend(
+        enqueueCh(a.msg.channel, () => chSend(
           a.msg.channel, a.msg.senderId,
           "⚠️ 这条超过超时阈值还没回完，可能卡在等输入。发 /reset 重置，或电脑上 tmux attach -t zzcan-cli 看看。",
         ));
@@ -275,7 +283,7 @@ function dispatch(actions) {
 // ---- 入站 ----
 function onMessage(msg) {
   if (msg.nontext) {
-    enqueueIO(() => chSend(msg.channel, msg.senderId, "暂只支持文字消息"));
+    enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, "暂只支持文字消息"));
     return;
   }
   const cmd = matchCommand(msg.text);
@@ -313,40 +321,40 @@ function handleCommand(cmd, msg, arg = null) {
       const spaces = config.workspaces || {};
       const list = Object.entries(spaces).map(([k, v]) => `${k} → ${v}`).join("\n") || "（未登记，编辑 config.json 的 workspaces）";
       if (!arg) {
-        enqueueIO(() => chSend(msg.channel, msg.senderId, `📂 当前: ${WORKDIR}\n可切换:\n${list}`));
+        enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, `📂 当前: ${WORKDIR}\n可切换:\n${list}`));
         break;
       }
       if (!spaces[arg]) {
-        enqueueIO(() => chSend(msg.channel, msg.senderId, `❌ 未登记的工作区 ${arg}。可选:\n${list}`));
+        enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, `❌ 未登记的工作区 ${arg}。可选:\n${list}`));
         break;
       }
       const dir = spaces[arg].replace(/^~/, homedir());
       if (!existsSync(dir)) {
-        enqueueIO(() => chSend(msg.channel, msg.senderId, `❌ 目录不存在: ${dir}`));
+        enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, `❌ 目录不存在: ${dir}`));
         break;
       }
-      enqueueIO(async () => {
+      enqueueIO(() => {
         tmux("respawn-window", "-k", "-c", dir, "-t", TMUX_TARGET);
         resetSessionState();
         WORKDIR = dir;
         config.workdir = spaces[arg];
         writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); // 重启 Cli 后仍在该工作区
-        await chSend(msg.channel, msg.senderId, `✅ 已切到 ${arg} (${dir})，context 已清零`);
+        enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, `✅ 已切到 ${arg} (${dir})，context 已清零`));
       });
       break;
     }
     case "reset":
-      enqueueIO(async () => {
+      enqueueIO(() => {
         tmux("respawn-window", "-k", "-t", TMUX_TARGET);
         resetSessionState();
-        await chSend(msg.channel, msg.senderId, "✅ 已重启 Claude，context 已清零");
+        enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, "✅ 已重启 Claude，context 已清零"));
       });
       break;
     case "clear":
-      enqueueIO(async () => {
+      enqueueIO(() => {
         tmux("send-keys", "-t", TMUX_TARGET, "/clear", "Enter");
         resetSessionState();
-        await chSend(msg.channel, msg.senderId, "✅ context 已清空（进程未重启）");
+        enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, "✅ context 已清空（进程未重启）"));
       });
       break;
     case "stop": {
@@ -354,7 +362,7 @@ function handleCommand(cmd, msg, arg = null) {
       if (state.current) takeStream(state.current.turnId)?.cancel();
       const { state: s2, actions } = queueEvent(state, { type: "interrupt", now: Date.now() });
       state = s2;
-      enqueueIO(() => chSend(msg.channel, msg.senderId, "⏹ 已中断当前轮"));
+      enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, "⏹ 已中断当前轮"));
       dispatch(actions);
       break;
     }
@@ -363,7 +371,7 @@ function handleCommand(cmd, msg, arg = null) {
       const cur = state.current
         ? `处理中 turn=${state.current.turnId}（来自 ${state.current.msg.channel}），已 ${Math.round((Date.now() - state.current.injectedAt) / 1000)}s`
         : "空闲";
-      enqueueIO(() => chSend(
+      enqueueCh(msg.channel, () => chSend(
         msg.channel, msg.senderId,
         `📊 Cli 状态\n通道: ${channelLabels(", ")}\n工作区: ${WORKDIR}\nclaude pane: ${alive ? "存活" : "❌ 不存在/已死"}\n当前轮: ${cur}\n排队: ${state.queue.length} 条`,
       ));
@@ -378,10 +386,10 @@ function ensurePane(msg) {
     tmux("respawn-window", "-k", "-t", TMUX_TARGET);
     resetSessionState();
     log("claude pane dead → respawned");
-    enqueueIO(() => chSend(msg.channel, msg.senderId, "⚠️ Claude 进程曾退出，已自动重启（context 清零），请重发刚才那条"));
+    enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, "⚠️ Claude 进程曾退出，已自动重启（context 清零），请重发刚才那条"));
   } catch (e) {
     log(`respawn failed: ${e}`);
-    enqueueIO(() => chSend(msg.channel, msg.senderId, "❌ Claude 进程不在且重启失败，请电脑上检查 tmux session zzcan-cli"));
+    enqueueCh(msg.channel, () => chSend(msg.channel, msg.senderId, "❌ Claude 进程不在且重启失败，请电脑上检查 tmux session zzcan-cli"));
   }
   return false;
 }
